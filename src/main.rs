@@ -1,5 +1,3 @@
-mod sdm;
-
 use axum::{
     response::{IntoResponse, Response},
     routing::get,
@@ -12,10 +10,13 @@ async fn ntag_handler(Form(sdmdata): Form<sdm::SdmData>) -> Response {
     let s = sdm::Sdm::new(
         "11111111111111111111111111111111",
         "22222222222222222222222222222222",
-        sdmdata,
+        sdmdata.clone(),
     );
 
-    let verified = s.verify();
+    let verified = s.verify(&format!(
+            "dekay.se/ntag?e={}&m={}&c=",
+            &sdmdata.e, &sdmdata.m
+        ));
 
     if !verified {
         "Invalid tag".into_response()
