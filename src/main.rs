@@ -5,29 +5,27 @@ use axum::{
     routing::get,
     Form, Router,
 };
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use std::net::SocketAddr;
-use serde::Deserialize;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-#[derive(Deserialize)]
-struct SdmData {
-    e: String,
-    c: String,
-}
+async fn ntag_handler(Form(sdmdata): Form<sdm::SdmData>) -> Response {
+    let s = sdm::Sdm::new(
+        "00000000000000000000000000000000",
+        "00000000000000000000000000000000",
+        sdmdata,
+    );
 
-async fn ntag_handler(Form(sdmdata): Form<SdmData>) -> Response {
-    let piccdata = match sdm::decrypt_picc_data("00000000000000000000000000000000", &sdmdata.e) {
-        Some(e) => e,
-        None => return "Invalid input data".into_response()
-    };
-    let verified = sdm::verify_mac("00000000000000000000000000000000", &piccdata, &sdmdata.c);
+    let verified = s.verify();
 
     if !verified {
         "Invalid tag".into_response()
-    }
-    else
-    {
-        format!("Got a valid tag: {:#?}", piccdata).into_response()
+    } else {
+        format!(
+            "Got a valid tag:\n{:#?}\nEncrypted message: {}",
+            s.picc_data,
+            String::from_utf8(s.decrypt_message()).unwrap()
+        )
+        .into_response()
     }
 }
 
@@ -42,9 +40,8 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let app = Router::new()
-        .route("/", get(ntag_handler));
-    
+    let app = Router::new().route("/", get(ntag_handler));
+
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::debug!("listening on {}", addr);
     axum::Server::bind(&addr)
