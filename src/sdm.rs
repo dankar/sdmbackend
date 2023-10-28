@@ -29,20 +29,16 @@ struct AsciiKeys {
 }
 
 struct SdmKeys {
-    sdm_meta_read: GenericArray<u8, U16>,
-    sdm_file_read: GenericArray<u8, U16>,
+    sdm_meta_read: Vec<u8>,
+    sdm_file_read: Vec<u8>,
 }
 
 impl TryFrom<&AsciiKeys> for SdmKeys {
     type Error = <[u8; 16] as FromHex>::Error;
     fn try_from(keys: &AsciiKeys) -> Result<Self, Self::Error> {
         Ok(SdmKeys {
-            sdm_meta_read: GenericArray::clone_from_slice(&<[u8; 16]>::from_hex(
-                &keys.sdm_meta_read,
-            )?),
-            sdm_file_read: GenericArray::clone_from_slice(&<[u8; 16]>::from_hex(
-                &keys.sdm_file_read,
-            )?),
+            sdm_meta_read: Vec::from(<[u8; 16]>::from_hex(&keys.sdm_meta_read)?),
+            sdm_file_read: Vec::from(<[u8; 16]>::from_hex(&keys.sdm_file_read)?),
         })
     }
 }
@@ -50,9 +46,9 @@ impl TryFrom<&AsciiKeys> for SdmKeys {
 pub struct Sdm {
     data: SdmData,
     pub picc_data: PiccData,
-    session_key_enc: GenericArray<u8, U16>,
-    session_key_mac: GenericArray<u8, U16>,
-    ive: GenericArray<u8, U16>,
+    session_key_enc: Vec<u8>,
+    session_key_mac: Vec<u8>,
+    ive: Vec<u8>,
 }
 
 type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
@@ -81,21 +77,18 @@ impl Sdm {
 
         let mut ive = GenericArray::clone_from_slice(&ive_vec);
 
-        Aes128::new(&session_key_enc).encrypt_block(&mut ive);
+        Aes128::new(session_key_enc.as_slice().into()).encrypt_block(&mut ive);
 
         Self {
             data,
             picc_data,
             session_key_enc,
             session_key_mac,
-            ive,
+            ive: ive.iter().cloned().collect(),
         }
     }
 
-    fn calculate_session_keys(
-        keys: &SdmKeys,
-        picc_data: &PiccData,
-    ) -> (GenericArray<u8, U16>, GenericArray<u8, U16>) {
+    fn calculate_session_keys(keys: &SdmKeys, picc_data: &PiccData) -> (Vec<u8>, Vec<u8>) {
         let uid_vec = Vec::from(<[u8; 7]>::from_hex(&picc_data.uid).unwrap());
         let read_ctr = vec![
             (picc_data.read_counter & 0xff) as u8,
@@ -109,20 +102,20 @@ impl Sdm {
         sv2.append(&mut uid_vec.clone());
         sv2.append(&mut read_ctr.clone());
 
-        let sv1_array: GenericArray<_, U16> = GenericArray::clone_from_slice(&sv1);
-        let sv2_array: GenericArray<_, U16> = GenericArray::clone_from_slice(&sv2);
-
-        let mut mac_cipher = <Cmac<Aes128> as KeyInit>::new(&keys.sdm_file_read);
-        mac_cipher.update(&sv1_array);
+        let mut mac_cipher = <Cmac<Aes128> as KeyInit>::new(keys.sdm_file_read.as_slice().into());
+        mac_cipher.update(&sv1);
         let result = mac_cipher.finalize();
         let session_key_enc = result.into_bytes();
 
-        let mut mac_cipher = <Cmac<Aes128> as KeyInit>::new(&keys.sdm_file_read);
-        mac_cipher.update(&sv2_array);
+        let mut mac_cipher = <Cmac<Aes128> as KeyInit>::new(keys.sdm_file_read.as_slice().into());
+        mac_cipher.update(&sv2);
         let result = mac_cipher.finalize();
         let session_key_mac = result.into_bytes();
 
-        return (session_key_enc, session_key_mac);
+        return (
+            session_key_enc.iter().cloned().collect(),
+            session_key_mac.iter().cloned().collect(),
+        );
     }
 
     fn decrypt_picc_data(keys: &SdmKeys, enc_picc_data: &str) -> Option<PiccData> {
@@ -133,7 +126,7 @@ impl Sdm {
         let mut block: GenericArray<_, U16> =
             GenericArray::clone_from_slice(&<[u8; 16]>::from_hex(enc_picc_data).unwrap());
 
-        Aes128::new(&keys.sdm_meta_read).decrypt_block(&mut block);
+        Aes128::new(keys.sdm_meta_read.as_slice().into()).decrypt_block(&mut block);
 
         let result = PiccData {
             tag_data: block[0],
@@ -157,7 +150,7 @@ impl Sdm {
             self.data.e, self.data.m
         ));
 
-        let mut mac_cipher = <Cmac<Aes128> as KeyInit>::new(&self.session_key_mac);
+        let mut mac_cipher = <Cmac<Aes128> as KeyInit>::new(self.session_key_mac.as_slice().into());
 
         mac_cipher.update(s.as_bytes());
         let result = mac_cipher.finalize();
@@ -178,7 +171,7 @@ impl Sdm {
         }
     }
 
-    pub fn decrypt_message(&self) -> Vec<u8> {
+    pub fn decrypt_message(&self) -> Result<Vec<u8>, ()> {
         let raw_data = <[u8; 32]>::from_hex(&self.data.m).unwrap();
 
         let mut blocks: [GenericArray<_, U16>; 2] = [
@@ -186,12 +179,14 @@ impl Sdm {
             GenericArray::clone_from_slice(&raw_data[16..32]),
         ];
 
-        let mut pt = Aes128CbcDec::new(&self.session_key_enc.into(), &self.ive.into());
-        pt.decrypt_blocks_mut(&mut blocks);
+        Aes128CbcDec::new(
+            self.session_key_enc.as_slice().into(),
+            self.ive.as_slice().into(),
+        ).decrypt_blocks_mut(&mut blocks);
 
-        return blocks.iter().fold(Vec::new(), |mut acc, x| {
+        return Ok(blocks.iter().fold(Vec::new(), |mut acc, x| {
             acc.append(&mut x.iter().cloned().collect());
             acc
-        });
+        }));
     }
 }

@@ -23,7 +23,7 @@ async fn ntag_handler(Form(sdmdata): Form<sdm::SdmData>) -> Response {
         format!(
             "Got a valid tag:\n{:#?}\nEncrypted message: {}",
             s.picc_data,
-            String::from_utf8(s.decrypt_message()).unwrap()
+            String::from_utf8(s.decrypt_message().unwrap()).unwrap()
         )
         .into_response()
     }
