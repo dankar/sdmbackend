@@ -1,22 +1,43 @@
 use axum::{
+    extract::State,
     response::{IntoResponse, Response},
     routing::get,
     Form, Router,
 };
+use serde::{Deserialize, Serialize};
+use std::fs;
 use std::net::SocketAddr;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-async fn ntag_handler(Form(sdmdata): Form<sdm::SdmData>) -> Response {
+const CONFIG_FILENAME: &str = "config.json";
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ServerSettings {
+    pub sdm_meta_read_key: String,
+    pub sdm_file_read_key: String,
+    pub cmac_input_format: String,
+}
+
+fn formatter(input_string: &str, picc_data: &str, enc_data: &str) -> String {
+    input_string
+        .replace("ENCPiccData", picc_data)
+        .replace("SDMEncFileData", enc_data)
+}
+
+async fn ntag_handler(
+    State(server_settings): State<ServerSettings>,
+    Form(sdmdata): Form<sdm::SdmData>,
+) -> Response {
     let s = sdm::Sdm::new(
-        "11111111111111111111111111111111",
-        "22222222222222222222222222222222",
+        &server_settings.sdm_meta_read_key,
+        &server_settings.sdm_file_read_key,
         sdmdata.clone(),
     );
 
-    let verified = s.verify(&format!(
-            "dekay.se/ntag?e={}&m={}&c=",
-            &sdmdata.e, &sdmdata.m
-        ));
+    let verified = s.verify(&formatter(
+        &server_settings.cmac_input_format,
+        &sdmdata.e,
+        &sdmdata.m,
+    ));
 
     if !verified {
         "Invalid tag".into_response()
@@ -32,19 +53,16 @@ async fn ntag_handler(Form(sdmdata): Form<sdm::SdmData>) -> Response {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| {
-                "example_parse_body_based_on_content_type=debug,tower_http=debug".into()
-            }),
-        ))
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    let server_settings: ServerSettings = serde_json::from_str(
+        &fs::read_to_string(CONFIG_FILENAME).expect("Failed to open config file"),
+    )
+    .expect("Failed to parse server settings");
 
-    let app = Router::new().route("/", get(ntag_handler));
+    let app = Router::new()
+        .route("/", get(ntag_handler))
+        .with_state(server_settings);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    tracing::debug!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await

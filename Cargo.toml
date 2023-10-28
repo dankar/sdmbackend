@@ -8,6 +8,6 @@ edition = "2021"
 [dependencies]
 axum = "0.6.20"
 tokio = { version = "1.32.0", features = ["full"] }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 sdm = { path = "crates/sdm" }
+serde = "1.0.190"
+serde_json = "1.0.107"
