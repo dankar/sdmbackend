@@ -133,8 +133,7 @@ impl Sdm {
         let mut block: GenericArray<_, U16> =
             GenericArray::clone_from_slice(&<[u8; 16]>::from_hex(enc_picc_data).unwrap());
 
-        let cipher = Aes128::new(&keys.sdm_meta_read);
-        cipher.decrypt_block(&mut block);
+        Aes128::new(&keys.sdm_meta_read).decrypt_block(&mut block);
 
         let result = PiccData {
             tag_data: block[0],
@@ -153,12 +152,12 @@ impl Sdm {
     }
 
     pub fn verify(&self) -> bool {
-        let mut mac_cipher = <Cmac<Aes128> as KeyInit>::new(&self.session_key_mac);
-
         let s = String::from(format!(
             "dekay.se/ntag?e={}&m={}&c=",
             self.data.e, self.data.m
         ));
+
+        let mut mac_cipher = <Cmac<Aes128> as KeyInit>::new(&self.session_key_mac);
 
         mac_cipher.update(s.as_bytes());
         let result = mac_cipher.finalize();
@@ -189,12 +188,6 @@ impl Sdm {
 
         let mut pt = Aes128CbcDec::new(&self.session_key_enc.into(), &self.ive.into());
         pt.decrypt_blocks_mut(&mut blocks);
-
-        //let cipher = Aes128::new_from_slices(&self.session_key_enc, &self.ive);
-        //cipher.decrypt_blocks(&mut blocks);
-        //        cipher.decrypt_block(&mut block);
-
-        println!("{:?}", blocks);
 
         return blocks.iter().fold(Vec::new(), |mut acc, x| {
             acc.append(&mut x.iter().cloned().collect());

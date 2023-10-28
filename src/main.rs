@@ -10,8 +10,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 async fn ntag_handler(Form(sdmdata): Form<sdm::SdmData>) -> Response {
     let s = sdm::Sdm::new(
-        "00000000000000000000000000000000",
-        "00000000000000000000000000000000",
+        "11111111111111111111111111111111",
+        "22222222222222222222222222222222",
         sdmdata,
     );
 
