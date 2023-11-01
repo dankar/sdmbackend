@@ -5,10 +5,14 @@ use axum::{
     Form, Router,
 };
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use hex::FromHex;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::net::SocketAddr;
-use hex::FromHex;
+
+mod db;
+mod models;
+mod schema;
 
 const CONFIG_FILENAME: &str = "config.json";
 
@@ -56,18 +60,17 @@ async fn ntag_handler(
     let signature_verification = verify_signature(
         &s.picc_data.uid,
         s.decrypt_message().unwrap().as_slice().try_into().unwrap(),
-        &<[u8; 32]>::from_hex(server_settings.public_key.as_bytes()).unwrap()
+        &<[u8; 32]>::from_hex(server_settings.public_key.as_bytes()).unwrap(),
     );
 
-    if !verified {
-        "Invalid tag".into_response()
+    if verified && signature_verification {
+        if let Err(e) = db::Db::new().register_card(&s.picc_data.uid, s.picc_data.read_counter as i32) {
+            e.into_response()
+        } else {
+            "Access granted".into_response()
+        }
     } else {
-        format!(
-            "Got a valid tag:\n{:#?}\nSignature status: {}",
-            s.picc_data,
-            if signature_verification { "good" } else { "bad" }
-        )
-        .into_response()
+        "Card verification failed".into_response()
     }
 }
 
