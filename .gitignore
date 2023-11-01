@@ -1,2 +1,5 @@
 /target
 config.json
+db.sqlite
+diesel.toml
+src/schema.rs
