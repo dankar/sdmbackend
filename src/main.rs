@@ -4,9 +4,11 @@ use axum::{
     routing::get,
     Form, Router,
 };
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::net::SocketAddr;
+use hex::FromHex;
 
 const CONFIG_FILENAME: &str = "config.json";
 
@@ -15,12 +17,24 @@ pub struct ServerSettings {
     pub sdm_meta_read_key: String,
     pub sdm_file_read_key: String,
     pub cmac_input_format: String,
+    pub public_key: String,
 }
 
 fn formatter(input_string: &str, picc_data: &str, enc_data: &str) -> String {
     input_string
         .replace("ENCPiccData", picc_data)
         .replace("SDMEncFileData", enc_data)
+}
+
+fn verify_signature(uid: &str, signature: &[u8; 64], public_key: &[u8; 32]) -> bool {
+    let key = VerifyingKey::from_bytes(public_key).unwrap();
+    let sig = Signature::from_bytes(signature);
+
+    if let Ok(_) = key.verify(&<[u8; 7]>::from_hex(uid).unwrap(), &sig) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 async fn ntag_handler(
@@ -39,13 +53,19 @@ async fn ntag_handler(
         &sdmdata.m,
     ));
 
+    let signature_verification = verify_signature(
+        &s.picc_data.uid,
+        s.decrypt_message().unwrap().as_slice().try_into().unwrap(),
+        &<[u8; 32]>::from_hex(server_settings.public_key.as_bytes()).unwrap()
+    );
+
     if !verified {
         "Invalid tag".into_response()
     } else {
         format!(
-            "Got a valid tag:\n{:#?}\nEncrypted message: {}",
+            "Got a valid tag:\n{:#?}\nSignature status: {}",
             s.picc_data,
-            String::from_utf8(s.decrypt_message().unwrap()).unwrap()
+            if signature_verification { "good" } else { "bad" }
         )
         .into_response()
     }
