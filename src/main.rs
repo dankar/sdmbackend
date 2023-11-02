@@ -9,6 +9,9 @@ use hex::FromHex;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::net::SocketAddr;
+use log::info;
+use simple_logger::SimpleLogger;
+use dotenvy::dotenv;
 
 mod db;
 mod models;
@@ -22,6 +25,7 @@ pub struct ServerSettings {
     pub sdm_file_read_key: String,
     pub cmac_input_format: String,
     pub public_key: String,
+    pub listen_port: u16,
 }
 
 fn formatter(input_string: &str, picc_data: &str, enc_data: &str) -> String {
@@ -45,6 +49,7 @@ async fn ntag_handler(
     State(server_settings): State<ServerSettings>,
     Form(sdmdata): Form<sdm::SdmData>,
 ) -> Response {
+    info!("Got NTAG request");
     let s = sdm::Sdm::new(
         &server_settings.sdm_meta_read_key,
         &server_settings.sdm_file_read_key,
@@ -63,6 +68,8 @@ async fn ntag_handler(
         &<[u8; 32]>::from_hex(server_settings.public_key.as_bytes()).unwrap(),
     );
 
+    info!("Signature status: {:?}, CMAC status: {:?}", signature_verification, verified);
+
     if verified && signature_verification {
         if let Err(e) = db::Db::new().register_card(&s.picc_data.uid, s.picc_data.read_counter as i32) {
             e.into_response()
@@ -76,16 +83,20 @@ async fn ntag_handler(
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
+    SimpleLogger::new().env().init().unwrap();
     let server_settings: ServerSettings = serde_json::from_str(
         &fs::read_to_string(CONFIG_FILENAME).expect("Failed to open config file"),
     )
-    .expect("Failed to parse server settings");
+        .expect("Failed to parse server settings");
+
+    let listen_port = server_settings.listen_port;
 
     let app = Router::new()
         .route("/", get(ntag_handler))
         .with_state(server_settings);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    let addr = SocketAddr::from(([0, 0, 0, 0], listen_port));
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await

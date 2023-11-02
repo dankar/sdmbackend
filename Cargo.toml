@@ -15,3 +15,5 @@ ed25519-dalek = "2.0.0"
 hex = "0.4.3"
 diesel = { version = "2.1.3", features = ["sqlite"] }
 dotenvy = "0.15.7"
+log = "0.4.20"
+simple_logger = "4.2.0"
