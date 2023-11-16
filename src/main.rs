@@ -1,83 +1,32 @@
+mod card_verifier;
+mod db;
+mod models;
+mod schema;
+mod server_settings;
+
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
     routing::get,
     Form, Router,
 };
-use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-use hex::FromHex;
-use serde::{Deserialize, Serialize};
-use std::fs;
-use std::net::SocketAddr;
+use dotenvy::dotenv;
 use log::info;
 use simple_logger::SimpleLogger;
-use dotenvy::dotenv;
-
-mod db;
-mod models;
-mod schema;
+use std::net::SocketAddr;
+use crate::server_settings::ServerSettings;
 
 const CONFIG_FILENAME: &str = "config.json";
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct ServerSettings {
-    pub sdm_meta_read_key: String,
-    pub sdm_file_read_key: String,
-    pub cmac_input_format: String,
-    pub public_key: String,
-    pub listen_port: u16,
-}
-
-fn formatter(input_string: &str, picc_data: &str, enc_data: &str) -> String {
-    input_string
-        .replace("ENCPiccData", picc_data)
-        .replace("SDMEncFileData", enc_data)
-}
-
-fn verify_signature(uid: &str, signature: &[u8; 64], public_key: &[u8; 32]) -> bool {
-    let key = VerifyingKey::from_bytes(public_key).unwrap();
-    let sig = Signature::from_bytes(signature);
-
-    if let Ok(_) = key.verify(&<[u8; 7]>::from_hex(uid).unwrap(), &sig) {
-        return true;
-    } else {
-        return false;
-    }
-}
 
 async fn ntag_handler(
     State(server_settings): State<ServerSettings>,
     Form(sdmdata): Form<sdm::SdmData>,
 ) -> Response {
     info!("Got NTAG request");
-    let s = sdm::Sdm::new(
-        &server_settings.sdm_meta_read_key,
-        &server_settings.sdm_file_read_key,
-        sdmdata.clone(),
-    );
 
-    let verified = s.verify(&formatter(
-        &server_settings.cmac_input_format,
-        &sdmdata.e,
-        &sdmdata.m,
-    ));
-
-    let signature_verification = verify_signature(
-        &s.picc_data.uid,
-        s.decrypt_message().unwrap().as_slice().try_into().unwrap(),
-        &<[u8; 32]>::from_hex(server_settings.public_key.as_bytes()).unwrap(),
-    );
-
-    info!("Signature status: {:?}, CMAC status: {:?}", signature_verification, verified);
-
-    if verified && signature_verification {
-        if let Err(e) = db::Db::new().register_card(&s.picc_data.uid, s.picc_data.read_counter as i32) {
-            e.into_response()
-        } else {
-            "Access granted".into_response()
-        }
-    } else {
-        "Card verification failed".into_response()
+    match card_verifier::verify_card(&server_settings, &sdmdata) {
+        Ok(()) => "Access granted".into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -85,9 +34,8 @@ async fn ntag_handler(
 async fn main() {
     dotenv().ok();
     SimpleLogger::new().env().init().unwrap();
-    let server_settings: ServerSettings = serde_json::from_str(
-        &fs::read_to_string(CONFIG_FILENAME).expect("Failed to open config file"),
-    )
+
+    let server_settings = server_settings::ServerSettings::new(CONFIG_FILENAME)
         .expect("Failed to parse server settings");
 
     let listen_port = server_settings.listen_port;
@@ -96,8 +44,7 @@ async fn main() {
         .route("/", get(ntag_handler))
         .with_state(server_settings);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], listen_port));
-    axum::Server::bind(&addr)
+    axum::Server::bind(&SocketAddr::from(([0, 0, 0, 0], listen_port)))
         .serve(app.into_make_service())
         .await
         .unwrap();
