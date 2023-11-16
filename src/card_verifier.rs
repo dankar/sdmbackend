@@ -5,9 +5,12 @@ use hex::FromHex;
 use log::info;
 
 fn formatter(input_string: &str, picc_data: &str, enc_data: &str) -> String {
-    input_string
+    let string = input_string
         .replace("ENCPiccData", picc_data)
-        .replace("SDMEncFileData", enc_data)
+        .replace("SDMEncFileData", enc_data);
+
+    info!("CMAC input: {}", string);
+    return string;
 }
 
 fn verify_card_signature(uid: &str, signature: &[u8; 64], public_key: &[u8; 32]) -> bool {

@@ -38,7 +38,9 @@ async fn ntag_auth(
     }
 }
 
-async fn secret_stuff(session: Session<SessionNullPool>) -> Result<Response, (StatusCode, Response)> {
+async fn secret_stuff(
+    session: Session<SessionNullPool>,
+) -> Result<Response, (StatusCode, Response)> {
     let auth = session.get("auth").unwrap_or(0);
     if auth == 1 {
         Ok("You're in!".into_response())
@@ -55,6 +57,7 @@ async fn main() {
     let session_config = SessionConfig::default()
         .with_key(Key::generate())
         .with_security_mode(SecurityMode::PerSession);
+
     let session_store = SessionStore::<SessionNullPool>::new(None, session_config)
         .await
         .unwrap();
