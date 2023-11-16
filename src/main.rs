@@ -70,7 +70,7 @@ async fn main() {
         .layer(SessionLayer::new(session_store))
         .with_state(server_settings);
 
-    axum::Server::bind(&SocketAddr::from(([127, 0, 0, 1], listen_port)))
+    axum::Server::bind(&SocketAddr::from(([0, 0, 0, 0], listen_port)))
         .serve(app.into_make_service())
         .await
         .unwrap();
