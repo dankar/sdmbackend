@@ -8,6 +8,7 @@ use cmac::{Cmac, Mac};
 
 use hex::FromHex;
 use serde::Deserialize;
+use log::debug;
 
 #[derive(Debug)]
 pub struct PiccData {
@@ -151,14 +152,17 @@ impl Sdm {
         let result = mac_cipher.finalize();
         let mac_result = result.into_bytes();
 
-        if mac_result
+        let calc_mac = mac_result
             .iter()
             .skip(1)
             .step_by(2)
             .map(|x| format!("{:02X}", x))
             .collect::<Vec<String>>()
-            .join("")
-            == self.data.c
+                 .join("");
+
+        debug!("Calculated cmac = {}", calc_mac);
+        debug!("Expected cmac = {}", self.data.c);
+        if calc_mac == self.data.c
         {
             return true;
         } else {
@@ -178,7 +182,7 @@ impl Sdm {
                 &<[u8; 16]>::from_hex(&sl).unwrap(),
             ));
         }
-
+        
         Aes128CbcDec::new(
             self.session_key_enc.as_slice().into(),
             self.ive.as_slice().into(),

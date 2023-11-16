@@ -1554,6 +1554,7 @@ dependencies = [
  "cbc",
  "cmac",
  "hex",
+ "log",
  "serde",
 ]
 
