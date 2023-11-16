@@ -34,9 +34,14 @@ pub fn verify_card(server_settings: &ServerSettings, sdmdata: &sdm::SdmData) -> 
         &sdmdata.m,
     ));
 
+    let decrypted_message = match s.decrypt_message() {
+        Ok(v) => v,
+        Err(()) => return Err("Failed to decrypt message".into()),
+    };
+
     let signature_verification = verify_card_signature(
         &s.picc_data.uid,
-        s.decrypt_message().unwrap().as_slice().try_into().unwrap(),
+        decrypted_message.as_slice().try_into().unwrap(),
         &<[u8; 32]>::from_hex(server_settings.public_key.as_bytes()).unwrap(),
     );
 
