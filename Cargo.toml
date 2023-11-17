@@ -18,3 +18,5 @@ dotenvy = "0.15.7"
 log = "0.4.20"
 simple_logger = "4.2.0"
 axum_session = "0.9.0"
+tower = "0.4.13"
+tower-http = { version = "0.4.4", features = ["fs"]}

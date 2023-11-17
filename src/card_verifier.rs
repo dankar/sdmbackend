@@ -24,7 +24,7 @@ fn verify_card_signature(uid: &str, signature: &[u8; 64], public_key: &[u8; 32])
     }
 }
 
-pub fn verify_card(server_settings: &ServerSettings, sdmdata: &sdm::SdmData) -> Result<(), String> {
+pub fn verify_card(server_settings: &ServerSettings, sdmdata: &sdm::SdmData) -> Result<String, String> {
     let s = sdm::Sdm::new(
         &server_settings.sdm_meta_read_key,
         &server_settings.sdm_file_read_key,
@@ -55,7 +55,7 @@ pub fn verify_card(server_settings: &ServerSettings, sdmdata: &sdm::SdmData) -> 
 
     if verified && signature_verification {
         match db::Db::new().register_card(&s.picc_data.uid, s.picc_data.read_counter as i32) {
-            Ok(()) => Ok(()),
+            Ok(()) => Ok(s.picc_data.uid.clone()),
             Err(e) => Err(e),
         }
     } else {

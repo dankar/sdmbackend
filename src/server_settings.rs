@@ -7,6 +7,7 @@ pub struct ServerSettings {
     pub sdm_file_read_key: String,
     pub cmac_input_format: String,
     pub public_key: String,
+    pub secret_files: String,
     pub listen_port: u16,
 }
 
