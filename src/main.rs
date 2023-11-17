@@ -7,13 +7,17 @@ mod schema;
 mod server_settings;
 
 use crate::server_settings::ServerSettings;
-use axum::{middleware, routing::get, Router};
+use axum::{http::StatusCode, middleware, routing::get, Router};
 use axum_session::{Key, SecurityMode, SessionConfig, SessionLayer, SessionNullPool, SessionStore};
 use dotenvy::dotenv;
 use simple_logger::SimpleLogger;
 use std::net::SocketAddr;
 
 const CONFIG_FILENAME: &str = "config.json";
+
+async fn auth_err() -> (StatusCode, String) {
+    return (StatusCode::UNAUTHORIZED, "You must blip the thing".into());
+}
 
 #[tokio::main]
 async fn main() {

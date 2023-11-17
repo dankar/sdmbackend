@@ -16,17 +16,23 @@ use crate::server_settings::ServerSettings;
 pub async fn ntag_auth_handler(
     session: Session<SessionNullPool>,
     State(server_settings): State<ServerSettings>,
-    Form(sdmdata): Form<sdm::SdmData>,
+    optional_sdmdata: Option<Form<sdm::SdmData>>,
 ) -> Result<Redirect, (StatusCode, Response)> {
     info!("Got NTAG request");
 
-    match card_verifier::verify_card(&server_settings, &sdmdata) {
-        Ok(uid) => {
-            session.set("auth", 1);
-            session.set("card_uid", uid);
-            Ok(Redirect::to(&server_settings.secret_files))
+    if let Some(sdmdata) = optional_sdmdata {
+        match card_verifier::verify_card(&server_settings, &sdmdata) {
+            Ok(uid) => {
+                session.set("auth", 1);
+                session.set("card_uid", uid);
+                Ok(Redirect::to(&server_settings.secret_files))
+            }
+            Err(e) => Err((StatusCode::UNAUTHORIZED, e.into_response())),
         }
-        Err(e) => Err((StatusCode::UNAUTHORIZED, e.into_response())),
+    }
+    else
+    {
+        Err((StatusCode::UNAUTHORIZED, "You must blip the thing".into_response()))
     }
 }
 
