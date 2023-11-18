@@ -4,5 +4,5 @@
     "cmac_input_format": "mydomain.com/ntag?e=ENCPiccData&m=SDMEncFileData&c=",
     "public_key": "0000000000000000000000000000000000000000000000000000000000000000",
     "listen_port": 3017,
-    "enforce_read_counter": true,
+    "enforce_read_counter": true
 }
