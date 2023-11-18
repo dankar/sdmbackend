@@ -54,11 +54,15 @@ pub fn verify_card(server_settings: &ServerSettings, sdmdata: &sdm::SdmData) -> 
     );
 
     if verified && signature_verification {
-        match db::Db::new().register_card(&s.picc_data.uid, s.picc_data.read_counter as i32) {
-            Ok(()) => Ok(s.picc_data.uid.clone()),
-            Err(e) => Err(e),
+        if !server_settings.enforce_read_counter {
+            Ok(s.picc_data.uid.clone())
+        } else {
+            match db::Db::new().register_card(&s.picc_data.uid, s.picc_data.read_counter as i32) {
+                Ok(()) => Ok(s.picc_data.uid.clone()),
+                Err(e) => Err(e)
+            }
         }
     } else {
-        return Err("Card verification failed".into());
+        Err("Card verification failed".into())
     }
 }

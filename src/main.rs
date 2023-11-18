@@ -7,17 +7,13 @@ mod schema;
 mod server_settings;
 
 use crate::server_settings::ServerSettings;
-use axum::{http::StatusCode, middleware, routing::get, Router};
+use axum::{middleware, routing::get, Router};
 use axum_session::{Key, SecurityMode, SessionConfig, SessionLayer, SessionNullPool, SessionStore};
 use dotenvy::dotenv;
 use simple_logger::SimpleLogger;
 use std::net::SocketAddr;
 
 const CONFIG_FILENAME: &str = "config.json";
-
-async fn auth_err() -> (StatusCode, String) {
-    return (StatusCode::UNAUTHORIZED, "You must blip the thing".into());
-}
 
 #[tokio::main]
 async fn main() {
@@ -39,11 +35,13 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(authentication::ntag_auth_handler))
+        .route("/logout", get(authentication::ntag_logout))
         .nest_service(
-            &server_settings.secret_files,
-            get(handlers::secret_static_handler)
+            "/secret",
+            get(handlers::static_handler).with_state(String::from("secret-static/"))
                 .route_layer(middleware::from_fn(authentication::check_auth)),
         )
+        .nest_service("/static", get(handlers::static_handler).with_state(String::from("static/")))
         .layer(SessionLayer::new(session_store))
         .with_state(server_settings);
 

@@ -1,51 +1,47 @@
-use axum::{
-    extract::State,
-    middleware::Next,
-    http::Request,
-    response::{Redirect, Response, IntoResponse},
-    Form,
-    http::StatusCode,
-};
-use axum_session::{
-    Session, SessionNullPool
-};
-use log::info;
 use crate::card_verifier;
 use crate::server_settings::ServerSettings;
+use axum::{
+    extract::State,
+    http::Request,
+    middleware::Next,
+    response::{IntoResponse, Redirect},
+    Form,
+};
+use axum_session::{Session, SessionNullPool};
+use log::info;
 
 pub async fn ntag_auth_handler(
     session: Session<SessionNullPool>,
     State(server_settings): State<ServerSettings>,
     optional_sdmdata: Option<Form<sdm::SdmData>>,
-) -> Result<Redirect, (StatusCode, Response)> {
+) -> Redirect {
     info!("Got NTAG request");
 
     if let Some(sdmdata) = optional_sdmdata {
-        match card_verifier::verify_card(&server_settings, &sdmdata) {
-            Ok(uid) => {
-                session.set("auth", 1);
-                session.set("card_uid", uid);
-                Ok(Redirect::to(&server_settings.secret_files))
-            }
-            Err(e) => Err((StatusCode::UNAUTHORIZED, e.into_response())),
+        if let Ok(uid) = card_verifier::verify_card(&server_settings, &sdmdata) {
+            session.set("auth", 1);
+            session.set("card_uid", uid);
+            return Redirect::to("/secret");
         }
-    }
-    else
-    {
-        Err((StatusCode::UNAUTHORIZED, "You must blip the thing".into_response()))
-    }
+    } 
+
+    return Redirect::to("/static/access-denied.html");
+}
+
+pub async fn ntag_logout(session: Session<SessionNullPool>) -> Redirect {
+    session.clear();
+    Redirect::to("/")
 }
 
 pub async fn check_auth<B>(
     session: Session<SessionNullPool>,
     req: Request<B>,
     next: Next<B>,
-) -> Result<impl IntoResponse, (StatusCode, Response)> {
-
+) -> Result<impl IntoResponse, Redirect> {
     let auth = session.get("auth").unwrap_or(0);
     if auth == 1 {
         Ok(next.run(req).await)
     } else {
-        Err((StatusCode::UNAUTHORIZED, "Access denied".into_response()))
+        Err(Redirect::to("/static/access-denied.html"))
     }
 }
